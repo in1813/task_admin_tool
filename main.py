@@ -338,8 +338,24 @@ class TaskTreeApp(ctk.CTk):
             except (json.JSONDecodeError, IOError) as e:
                 messagebox.showerror("エラー", f"読み込みに失敗しました:\n{e}")
     
+    def get_open_states(self):
+        """全ノードの開閉状態を取得"""
+        open_states = {}
+        
+        def collect_states(item):
+            if item:
+                open_states[item] = self.tree.item(item, "open")
+            for child in self.tree.get_children(item):
+                collect_states(child)
+        
+        collect_states("")
+        return open_states
+    
     def refresh_tree(self):
         """ツリービューを更新"""
+        # 開閉状態を保存
+        open_states = self.get_open_states()
+        
         # 既存のアイテムを削除
         for item in self.tree.get_children():
             self.tree.delete(item)
@@ -354,18 +370,21 @@ class TaskTreeApp(ctk.CTk):
         root_tasks.sort(key=lambda x: x[1].get("created_at", ""))
         
         for task_id, task_data in root_tasks:
-            self.insert_task_to_tree("", task_id, task_data)
+            self.insert_task_to_tree("", task_id, task_data, open_states)
     
-    def insert_task_to_tree(self, parent_iid, task_id, task_data):
+    def insert_task_to_tree(self, parent_iid, task_id, task_data, open_states=None):
         """タスクをツリーに挿入（再帰的に子も挿入）"""
         status = task_data.get("status", STATUS_NOT_STARTED)
+        
+        # 開閉状態を決定（保存された状態があればそれを使用、なければTrue）
+        is_open = open_states.get(task_id, True) if open_states else True
         
         # ツリーに挿入
         self.tree.insert(
             parent_iid, "end", iid=task_id,
             text=task_data.get("name", "無題"),
             values=(status,),
-            open=True
+            open=is_open
         )
         
         # 子タスクを取得して挿入
@@ -376,7 +395,7 @@ class TaskTreeApp(ctk.CTk):
         children.sort(key=lambda x: x[1].get("created_at", ""))
         
         for child_id, child_data in children:
-            self.insert_task_to_tree(task_id, child_id, child_data)
+            self.insert_task_to_tree(task_id, child_id, child_data, open_states)
     
     def on_tree_select(self, event):
         """ツリーのアイテム選択時"""
